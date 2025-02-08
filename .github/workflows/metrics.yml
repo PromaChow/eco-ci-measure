@@ -10,10 +10,10 @@ jobs:
   analyze:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v3
+      - uses: actions/checkout@v4
 
       - name: Set up Python
-        uses: actions/setup-python@v4
+        uses: actions/setup-python@v5
         with:
           python-version: "3.10"
 
@@ -51,7 +51,7 @@ jobs:
           xenon --max-absolute B --max-modules B --max-average A ./src
 
       - name: Upload analysis results
-        uses: actions/upload-artifact@v3
+        uses: actions/upload-artifact@v4
         with:
           name: complexity-reports
           path: |
