@@ -1,0 +1,59 @@
+name: ML Project Complexity Analysis
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+
+jobs:
+  analyze:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.10"
+
+      - name: Install analysis tools
+        run: |
+          pip install radon
+          pip install wily
+          pip install pylint
+          pip install xenon
+          pip install cognitive_complexity
+
+      - name: Calculate Cyclomatic Complexity
+        run: |
+          radon cc ./src -a -s
+
+      - name: Calculate Maintainability Index
+        run: |
+          radon mi ./src -s
+
+      - name: Run Wily for history analysis
+        run: |
+          wily build ./src
+          wily report ./src
+
+      - name: Check Cognitive Complexity
+        run: |
+          cognitive_complexity ./src
+
+      - name: Run Pylint metrics
+        run: |
+          pylint --output-format=text ./src | tee pylint-report.txt
+
+      - name: Check complexity thresholds
+        run: |
+          xenon --max-absolute B --max-modules B --max-average A ./src
+
+      - name: Upload analysis results
+        uses: actions/upload-artifact@v3
+        with:
+          name: complexity-reports
+          path: |
+            pylint-report.txt
+            .wily/
