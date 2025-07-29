@@ -1,33 +1,17 @@
-name: CI with Carbon Tracking
+name: Simple Eco CI Test
 
 on:
   push:
-    branches: [ main, develop ]
+    branches: [ main ]
   pull_request:
     branches: [ main ]
 
 jobs:
-  build-with-carbon-tracking:
+  simple-carbon-test:
     runs-on: ubuntu-latest
     
     steps:
-      # Security hardening (optional but recommended)
-      - name: Harden Runner
-        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
-        with:
-          disable-sudo: true
-          egress-policy: block
-          allowed-endpoints: >
-            api.electricitymap.org:443
-            api.github.com:443
-            api.green-coding.io:443
-            files.pythonhosted.org:443
-            github.com:443
-            ip-api.com:80
-            ipapi.co:443
-            pypi.org:443
-      
-      # Start measurement - this is the key first step
+      # Start measurement
       - name: Start Energy Measurement
         uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de # v5.0.0
         with:
@@ -37,29 +21,35 @@ jobs:
       
       - name: Checkout Repository
         uses: actions/checkout@v4
-        with:
-          persist-credentials: false
-     
       
-      # Get intermediate measurement after environment setup
-      - name: Environment Setup Energy Measurement  
+      # Simple test task - just wait and do basic operations
+      - name: Simple CPU Task
+        run: |
+          echo "Starting simple CPU task..."
+          python3 -c "
+          import time
+          import math
+          
+          print('Running simple computation for 30 seconds...')
+          start_time = time.time()
+          result = 0
+          
+          while time.time() - start_time < 30:
+              for i in range(10000):
+                  result += math.sqrt(i * 2.5)
+          
+          print(f'Computation completed. Final result: {result}')
+          "
+      
+      # Get measurement after the task
+      - name: Task Energy Measurement
         uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de # v5.0.0
         with:
           task: get-measurement
-          label: 'Environment setup (Python3.11)'
+          label: 'Simple CPU task'
         continue-on-error: true
       
-
-      
-      # Get measurement after main work
-      - name: Application Run Energy Measurement
-        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de # v5.0.0
-        with:
-          task: get-measurement
-          label: 'Application execution'
-        continue-on-error: true
-      
-      # Final step - display all results
+      # Display results
       - name: Show Energy Results
         uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de # v5.0.0
         with:
