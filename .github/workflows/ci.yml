@@ -7,42 +7,76 @@ on:
     branches: [ main ]
 
 jobs:
-  test-with-carbon-tracking:
+  build-with-carbon-tracking:
     runs-on: ubuntu-latest
     
     steps:
-    - name: Checkout code
-      uses: actions/checkout@v4
-    
-    # Start energy measurement
-    - name: Start Energy Measurement
-      uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
-      with:
-        task: start-measurement
-      env:
-        ECO_CI_API_TOKEN: "maqbCvGDj1iRRtWc07AX"
-    
-    # Your CI tasks here
-    - name: Set up Python
-      uses: actions/setup-python@v4
-      with:
-        python-version: '3.9'
-    
-    
-    # End measurement and show results
-    - name: End Energy Measurement and Display Results
-      uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
-      with:
-        task: display-results
-      env:
-        ECO_CI_API_TOKEN: "maqbCvGDj1iRRtWc07AX"
-    
-    # Optional: Upload energy consumption data as artifact
-    - name: Upload energy consumption data
-      uses: actions/upload-artifact@v4
-      with:
-        name: energy-consumption-report
-        path: |
-          *.json
-          total_energy_consumption-*.json
-      if: always()
+      # Security hardening (optional but recommended)
+      - name: Harden Runner
+        uses: step-security/harden-runner@ec9f2d5744a09debf3a187a3f4f675c53b671911 # v2.13.0
+        with:
+          disable-sudo: true
+          egress-policy: block
+          allowed-endpoints: >
+            api.electricitymap.org:443
+            api.github.com:443
+            api.green-coding.io:443
+            files.pythonhosted.org:443
+            github.com:443
+            ip-api.com:80
+            ipapi.co:443
+            pypi.org:443
+      
+      # Start measurement - this is the key first step
+      - name: Start Energy Measurement
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de # v5.0.0
+        with:
+          task: start-measurement
+          branch: ${{ github.head_ref || github.ref_name }}
+        continue-on-error: true
+      
+      - name: Checkout Repository
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      
+      - name: Set up Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.11"
+          cache: 'pip'
+      
+      # Get intermediate measurement after environment setup
+      - name: Environment Setup Energy Measurement  
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de # v5.0.0
+        with:
+          task: get-measurement
+          label: 'Environment setup (Python3.11)'
+        continue-on-error: true
+      
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          if [ -f requirements.txt ]; then pip install -r requirements.txt; fi
+      
+      # Your actual work here
+      - name: Build/Run Application
+        run: |
+          # Replace with your actual commands
+          echo "Running your application..."
+          python -c "print('Application running...'); import time; time.sleep(10)"
+      
+      # Get measurement after main work
+      - name: Application Run Energy Measurement
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de # v5.0.0
+        with:
+          task: get-measurement
+          label: 'Application execution'
+        continue-on-error: true
+      
+      # Final step - display all results
+      - name: Show Energy Results
+        uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de # v5.0.0
+        with:
+          task: display-results
+        continue-on-error: true
