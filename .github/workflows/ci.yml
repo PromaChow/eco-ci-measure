@@ -1,30 +1,196 @@
-name: Debug Eco-CI
-on: [push]
+name: Debug Eco-CI Carbon Calculation
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+
 jobs:
-  test:
+  eco-ci-debug:
     runs-on: ubuntu-latest
+    permissions:
+      actions: read  # Required for private repos
+      contents: read
     steps:
-      - name: Start Measurement
+      # Step 1: Check system info
+      - name: System Info
+        run: |
+          echo "=== System Information ==="
+          uname -a
+          lscpu | head -20
+          free -h
+          echo "=== Environment ==="
+          env | grep -E "(GITHUB|RUNNER)" | sort
+          
+      # Step 2: Checkout code
+      - uses: actions/checkout@v4
+      
+      # Step 3: Start measurement with EXPLICIT settings
+      - name: Start Energy Measurement
+        id: start-eco-ci
         uses: green-coding-solutions/eco-ci-energy-estimation@v4
         with:
           task: start-measurement
+          send-data: true
           calculate-co2: true
           co2-calculation-method: 'constant'
-          co2-grid-intensity-constant: 432
-          send-data: true
-      - name: Dummy Work
+          co2-grid-intensity-constant: 472  # Use default value
+          display-table: true
+          display-badge: true
+          json-output: true
+        continue-on-error: false  # Let it fail if there are issues
+        
+      # Step 4: Check if eco-ci started properly
+      - name: Check Eco-CI Started
         run: |
-          echo "Doing some work..."
-          sleep 10
-          stress --cpu 1 --timeout 10s || echo "stress not available, using alternatives"
-          for i in {1..1000000}; do echo $i > /dev/null; done
-      - name: Get Measurement
+          echo "=== Checking Eco-CI startup ==="
+          ls -la /tmp/eco-ci/ || echo "No /tmp/eco-ci directory found"
+          if [ -d /tmp/eco-ci ]; then
+            find /tmp/eco-ci -type f -exec echo "File: {}" \; -exec head -5 {} \; 2>/dev/null || true
+          fi
+          
+      # Step 5: Do some actual work to generate CPU load
+      - name: Generate CPU Load
+        run: |
+          echo "=== Generating CPU load for measurement ==="
+          # Install stress if available
+          sudo apt-get update -qq
+          sudo apt-get install -y stress-ng || echo "stress-ng not available"
+          
+          # Generate some CPU load
+          echo "Running CPU stress test..."
+          stress-ng --cpu 2 --timeout 10s || {
+            echo "stress-ng failed, using alternative method"
+            for i in {1..5}; do
+              echo "CPU load iteration $i"
+              dd if=/dev/zero of=/dev/null bs=1M count=100 &
+            done
+            sleep 10
+            pkill dd || true
+          }
+          
+          # Some disk I/O
+          echo "Generating disk I/O..."
+          dd if=/dev/zero of=/tmp/test_file bs=1M count=50
+          rm -f /tmp/test_file
+          
+          echo "CPU load generation complete"
+          
+      # Step 6: Take a measurement
+      - name: First Measurement
+        id: first-measurement
         uses: green-coding-solutions/eco-ci-energy-estimation@v4
         with:
           task: get-measurement
-          label: 'dummy work'
-      - name: Display Results
+          label: 'CPU Load Test'
+        continue-on-error: false
+        
+      # Step 7: Check measurement output
+      - name: Check First Measurement
+        run: |
+          echo "=== First Measurement Check ==="
+          echo "Output: ${{ steps.first-measurement.outputs.data-lap-json }}"
+          ls -la /tmp/eco-ci/ || echo "No /tmp/eco-ci directory"
+          if [ -f /tmp/eco-ci/lap-data.json ]; then
+            echo "=== lap-data.json content ==="
+            cat /tmp/eco-ci/lap-data.json
+          else
+            echo "No lap-data.json found"
+          fi
+          
+      # Step 8: More work
+      - name: Python Setup and Work
+        run: |
+          echo "=== Setting up Python environment ==="
+          python3 -m pip install --upgrade pip
+          python3 -c "
+import time
+import hashlib
+print('Starting Python workload...')
+# CPU intensive task
+for i in range(100000):
+    hashlib.sha256(str(i).encode()).hexdigest()
+    if i % 10000 == 0:
+        print(f'Progress: {i/1000}%')
+print('Python workload complete')
+"
+          
+      # Step 9: Second measurement
+      - name: Second Measurement
+        id: second-measurement
+        uses: green-coding-solutions/eco-ci-energy-estimation@v4
+        with:
+          task: get-measurement
+          label: 'Python Work'
+        continue-on-error: false
+        
+      # Step 10: Display results with debugging
+      - name: Display Energy Results
+        id: display-results
         uses: green-coding-solutions/eco-ci-energy-estimation@v4
         with:
           task: display-results
           display-table: true
+          display-badge: true
+          json-output: true
+        continue-on-error: false
+        
+      # Step 11: Debug final output
+      - name: Debug Final Output
+        run: |
+          echo "=== Final Debugging ==="
+          echo "Display results output: ${{ steps.display-results.outputs.data-total-json }}"
+          
+          # Check all eco-ci files
+          if [ -d /tmp/eco-ci ]; then
+            echo "=== All eco-ci files ==="
+            find /tmp/eco-ci -type f -exec echo "=== {} ===" \; -exec cat {} \; 2>/dev/null || true
+          fi
+          
+          # Check for any error logs
+          echo "=== Checking for errors in logs ==="
+          journalctl --no-pager -n 50 | grep -i "eco\|carbon\|co2" || echo "No eco-ci related logs found"
+          
+      # Step 12: Alternative carbon calculation
+      - name: Manual Carbon Calculation
+        run: |
+          echo "=== Manual Carbon Calculation Check ==="
+          # Try to extract energy value and calculate carbon manually
+          if [ -f /tmp/eco-ci/lap-data.json ]; then
+            echo "Found lap-data.json, attempting manual calculation..."
+            
+            # Extract energy values using jq if available
+            if command -v jq &> /dev/null; then
+              echo "Using jq to parse JSON..."
+              TOTAL_ENERGY=$(jq -r '.total_energy // empty' /tmp/eco-ci/lap-data.json 2>/dev/null || echo "0")
+              echo "Total Energy (J): $TOTAL_ENERGY"
+              
+              if [ "$TOTAL_ENERGY" != "0" ] && [ "$TOTAL_ENERGY" != "" ]; then
+                # Convert Joules to kWh (1 kWh = 3,600,000 J)
+                ENERGY_KWH=$(echo "scale=6; $TOTAL_ENERGY / 3600000" | bc -l 2>/dev/null || echo "calculation_failed")
+                echo "Energy (kWh): $ENERGY_KWH"
+                
+                # Calculate CO2 (using 472 g CO2/kWh)
+                if [ "$ENERGY_KWH" != "calculation_failed" ]; then
+                  CO2_GRAMS=$(echo "scale=3; $ENERGY_KWH * 472" | bc -l 2>/dev/null || echo "calculation_failed")
+                  echo "Manual CO2 Calculation (g): $CO2_GRAMS"
+                fi
+              fi
+            else
+              echo "jq not available, showing raw file content:"
+              cat /tmp/eco-ci/lap-data.json
+            fi
+          else
+            echo "No lap-data.json file found for manual calculation"
+          fi
+          
+      # Step 13: Check GitHub Step Summary
+      - name: Check Step Summary
+        run: |
+          echo "=== GitHub Step Summary Check ==="
+          if [ -f "$GITHUB_STEP_SUMMARY" ]; then
+            echo "Step summary file exists, content:"
+            cat "$GITHUB_STEP_SUMMARY"
+          else
+            echo "No step summary file found at: $GITHUB_STEP_SUMMARY"
+          fi
