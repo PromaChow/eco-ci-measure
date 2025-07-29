@@ -16,7 +16,7 @@ jobs:
     
     # Start energy measurement
     - name: Start Energy Measurement
-      uses: green-coding-solutions/eco-ci-energy-estimation@v3
+      uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
       with:
         task: start-measurement
       env:
@@ -31,7 +31,7 @@ jobs:
     
     # End measurement and show results
     - name: End Energy Measurement and Display Results
-      uses: green-coding-solutions/eco-ci-energy-estimation@v3
+      uses: green-coding-solutions/eco-ci-energy-estimation@862050e4f01f65b1436e5eca18ba4bd85562f0de
       with:
         task: display-results
       env:
